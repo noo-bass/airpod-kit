@@ -15,7 +15,8 @@ public struct Vector3: Sendable, Codable, Equatable, Hashable {
     public static let zero = Vector3(x: 0, y: 0, z: 0)
 }
 
-/// One reading from the AirPods' motion sensors. They send about 25 a second.
+/// One reading from the AirPods' motion sensors: 50 a second from AirPods
+/// Pro 2 (measured), 25 from some older models.
 public struct MotionSample: Sendable, Codable, Equatable {
     /// Seconds, on whatever clock the source uses. Only differences matter.
     public var timestamp: TimeInterval

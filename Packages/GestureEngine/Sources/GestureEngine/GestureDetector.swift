@@ -28,8 +28,10 @@ public struct GestureDetector<GestureKey: Hashable & Sendable>: Sendable {
     private var previousDistance: [GestureKey: Double] = [:]
     private var quietUntil: [GestureKey: TimeInterval] = [:]
 
-    /// Five seconds at 25 readings a second; longer than any sensible gesture.
-    private let historyLimit = 125
+    /// Longer than any sensible gesture. Measured in seconds, not readings,
+    /// because the rate depends on the model: AirPods Pro 2 send 50 a second,
+    /// older ones 25.
+    private let historySeconds: TimeInterval = 5
 
     public init() {}
 
@@ -54,9 +56,15 @@ public struct GestureDetector<GestureKey: Hashable & Sendable>: Sendable {
     /// Feeds one reading in and returns the gestures that just finished.
     public mutating func process(_ sample: MotionSample) -> [GestureKey] {
         history.append(sample)
-        if history.count > historyLimit {
-            history.removeFirst(history.count - historyLimit)
+        if let firstKept = history.firstIndex(where: { sample.timestamp - $0.timestamp <= historySeconds }), firstKept > 0 {
+            history.removeFirst(firstKept)
         }
+
+        // Templates are counted in readings, so the quiet period after a fire
+        // needs the reading rate to turn that into seconds.
+        let readingsPerSecond = history.count > 1
+            ? Double(history.count - 1) / max(history.last!.timestamp - history.first!.timestamp, 0.001)
+            : 25
 
         var fired: [GestureKey] = []
         for (key, gesture) in watched {
@@ -88,7 +96,6 @@ public struct GestureDetector<GestureKey: Hashable & Sendable>: Sendable {
                 fired.append(key)
                 // Stay quiet for about the length of the gesture, so the tail
                 // of the same movement cannot match a second time.
-                let readingsPerSecond = 25.0
                 quietUntil[key] = sample.timestamp + max(0.4, Double(model.longestTemplateLength) / readingsPerSecond)
                 previousDistance[key] = .infinity
                 closeness[key] = 0
