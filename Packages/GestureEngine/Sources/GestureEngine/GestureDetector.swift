@@ -73,16 +73,7 @@ public struct GestureDetector<GestureKey: Hashable & Sendable>: Sendable {
                 closeness[key] = 0
                 continue
             }
-            // A bit more history than the longest example, so a repeat done
-            // slower than any example still fits inside the window.
-            let windowLength = min(history.count, Int(Double(model.longestTemplateLength) * 1.5) + 2)
-            guard windowLength >= 3 else { continue }
-            let window = history.suffix(windowLength).map { model.scaled($0.features) }
-
-            let strongestMovement = window.map(GestureLearner.activityLevel).max() ?? 0
-            let distance = strongestMovement >= model.minimumActivity
-                ? model.distance(to: window)
-                : .infinity
+            guard let distance = model.distance(endingWith: history) else { continue }
             closeness[key] = distance.isFinite ? min(1, gesture.threshold / distance) : 0
 
             // Fire at the best moment, not the first good-enough one. As a

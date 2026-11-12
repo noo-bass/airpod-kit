@@ -9,3 +9,8 @@ xcuserdata/
 # Your own signing team, so a stable signature keeps the Accessibility
 # permission across rebuilds. See Config/Signing.xcconfig.
 Config/Local.xcconfig
+
+# Comparison results: rebuilt from the recordings, which are personal and
+# never in this repo.
+analysis/cache/
+analysis/__marimo__/

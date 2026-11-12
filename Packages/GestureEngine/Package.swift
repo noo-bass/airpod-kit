@@ -9,9 +9,14 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "GestureEngine", targets: ["GestureEngine"]),
+        .executable(name: "compare-approaches", targets: ["CompareApproaches"]),
     ],
     targets: [
         .target(name: "GestureEngine"),
+        // Trains every approach on the same recordings and writes score
+        // traces for the comparison notebook. Separate from the library so the
+        // app never links Create ML's training code.
+        .executableTarget(name: "CompareApproaches", dependencies: ["GestureEngine"]),
         .testTarget(name: "GestureEngineTests", dependencies: ["GestureEngine"]),
     ]
 )
