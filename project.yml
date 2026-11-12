@@ -1,0 +1,40 @@
+# The Xcode project is generated from this file (`xcodegen generate`) and not
+# committed: a hand-edited .xcodeproj merges badly and hides what changed.
+name: AirPodKit
+options:
+  bundleIdPrefix: io.github.noo-bass
+  deploymentTarget:
+    macOS: "14.0"
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+packages:
+  GestureEngine:
+    path: Packages/GestureEngine
+settings:
+  base:
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+targets:
+  AirPodKit:
+    type: application
+    platform: macOS
+    sources: [App]
+    dependencies:
+      - package: GestureEngine
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: AirPod Kit
+        LSApplicationCategoryType: public.app-category.utilities
+        # macOS refuses headphone motion to any app without this sentence.
+        NSMotionUsageDescription: AirPod Kit reads your AirPods' motion sensors to spot the movements you teach it.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.noo-bass.airpodkit
+        PRODUCT_NAME: AirPod Kit
+        SWIFT_VERSION: "5.0"
+        # Not sandboxed: the app will press keys and run commands for you,
+        # which a sandboxed app is not allowed to do.
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO
