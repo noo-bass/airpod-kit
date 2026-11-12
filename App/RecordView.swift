@@ -15,6 +15,23 @@ struct RecordView: View {
                 Text("Two kinds of recording teach the app. Takes show it what a gesture looks like. Normal use shows it what to ignore, which matters just as much: without it, any movement can look like a gesture.")
                     .foregroundStyle(.secondary)
 
+                // The record buttons are greyed out while no readings arrive.
+                // Without this line that looked like the app had broken, when
+                // the AirPods had simply switched to a phone.
+                if !streaming {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Recording is paused: no readings from your AirPods.")
+                            Text("Put them in, or connect them to this Mac from the Bluetooth menu. AirPods often switch to an iPhone on their own.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                    }
+                    .padding(12)
+                    .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                }
+
                 takesSection
                 Divider()
                 backgroundSection
