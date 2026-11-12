@@ -133,3 +133,14 @@ func fireTimes(of detector: inout GestureDetector<String>, over stream: [MotionS
         try GestureLearner.learn(from: [withMovement, stillOnly])
     }
 }
+
+/// Real nods recorded in the app took up most of each take: slow, broad, and
+/// with the head still settling from the last take. Estimating resting jitter
+/// from the whole take then measured the nod instead, set it about twenty
+/// times too high, and lost the gentler nods entirely.
+@Test func findsTheMovementWhenItFillsMostOfTheTake() throws {
+    let model = try GestureLearner.learn(from: recordings(5) { head, index in
+        head.nod(seconds: 1.6, strength: index == 4 ? 0.8 : 2)
+    }.map { take in Array(take.dropFirst(15).dropLast(25)) })
+    #expect(model.exampleCount == 5)
+}

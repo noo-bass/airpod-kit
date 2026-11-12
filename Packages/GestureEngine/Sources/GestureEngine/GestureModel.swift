@@ -45,6 +45,25 @@ public struct GestureModel: Sendable, Codable, Equatable {
     func distance(to scaledStream: [[Double]]) -> Double {
         templates.map { subsequenceDistance(template: $0, stream: scaledStream) }.min() ?? .infinity
     }
+
+    /// How far the movement that just finished is from this gesture.
+    /// Infinity when the movement is too weak to count; nil when there is not
+    /// yet enough history to judge.
+    public func distance(endingWith history: [MotionSample]) -> Double? {
+        // A bit more history than the longest example, so a repeat done
+        // slower than any example still fits inside the window.
+        let windowLength = min(history.count, Int(Double(longestTemplateLength) * 1.5) + 2)
+        guard windowLength >= 3 else { return nil }
+        let window = history.suffix(windowLength).map { scaled($0.features) }
+        let strongestMovement = window.map(GestureLearner.activityLevel).max() ?? 0
+        return strongestMovement >= minimumActivity ? distance(to: window) : .infinity
+    }
+
+    /// Where the movement is in a recording, judged with this gesture's
+    /// scaling. Used to find the gesture inside a take for other learners.
+    public func movementRange(in samples: [MotionSample]) -> ClosedRange<Int>? {
+        GestureLearner.movementBounds(samples.map { scaled($0.features) })?.range
+    }
 }
 
 public enum GestureLearningError: Error, Equatable, LocalizedError {
@@ -79,14 +98,32 @@ public enum GestureLearner {
         // earbud by about 0.02 g. Compared raw, a clench would be invisible
         // next to the slightest head turn. Dividing each channel by its own
         // resting jitter puts them on one footing: "how many times bigger than
-        // noise". The middle of each channel's spread is used for "at rest"
-        // because most of each recording is stillness around a short movement.
+        // noise".
+        //
+        // Resting jitter is measured on the quietest stretches only. The first
+        // version took the spread of whole recordings, assuming they were
+        // mostly stillness. Real nods were not: slow and broad, with the head
+        // still settling from the previous take, they filled most of the
+        // recording. Jitter came out at 0.56 rad/s, about twenty times too
+        // high, and gentler nods vanished below it.
+        let chunkLength = 12
+        let quietChunks = recordings.flatMap { recording in
+            Swift.stride(from: 0, to: recording.count - chunkLength + 1, by: chunkLength).map {
+                recording[$0..<($0 + chunkLength)].map(\.features)
+            }
+        }
         var centre = [Double](repeating: 0, count: MotionSample.featureCount)
         var scale = [Double](repeating: 1, count: MotionSample.featureCount)
         for channel in 0..<MotionSample.featureCount {
-            let values = allFrames.map { $0[channel] }
-            let middle = median(values)
-            let spread = median(values.map { abs($0 - middle) }) * 1.4826
+            let middle = median(allFrames.map { $0[channel] })
+            let chunkSpreads = quietChunks.map { chunk in
+                let values = chunk.map { $0[channel] }
+                let mean = values.reduce(0, +) / Double(values.count)
+                return (values.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(values.count)).squareRoot()
+            }.sorted()
+            // The quietest quarter, so up to three quarters of the recordings
+            // can be movement without spoiling the estimate.
+            let spread = chunkSpreads.isEmpty ? 0 : chunkSpreads[chunkSpreads.count / 4]
             centre[channel] = middle
             // A floor stops a channel that happened to read perfectly flat
             // from being divided by zero and then blowing up at the first
@@ -154,6 +191,11 @@ public enum GestureLearner {
     /// the stillness before and after. The stillness would otherwise become
     /// part of the "shape" and every live match would have to include it.
     static func trimToMovement(_ frames: [[Double]]) -> (frames: [[Double]], peakActivity: Double)? {
+        guard let bounds = movementBounds(frames) else { return nil }
+        return (Array(frames[bounds.range]), bounds.peak)
+    }
+
+    static func movementBounds(_ frames: [[Double]]) -> (range: ClosedRange<Int>, peak: Double)? {
         let activity = frames.map(activityLevel)
         // Activity is measured after the jitter allowance is taken off, so 4
         // here is about six times resting jitter on the strongest channel.
@@ -165,9 +207,7 @@ public enum GestureLearner {
               let last = activity.lastIndex(where: { $0 >= cutoff }) else { return nil }
         // Two readings either side keep the gentle start and finish of the
         // movement, which help tell, say, a nod from a single downward dip.
-        let start = max(0, first - 2)
-        let end = min(frames.count - 1, last + 2)
-        return (Array(frames[start...end]), peak)
+        return (max(0, first - 2)...min(frames.count - 1, last + 2), peak)
     }
 
     static func activityLevel(_ scaledFrame: [Double]) -> Double {
