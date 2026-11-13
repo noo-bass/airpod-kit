@@ -9,14 +9,17 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "GestureEngine", targets: ["GestureEngine"]),
+        .library(name: "GestureLearning", targets: ["GestureLearning"]),
         .executable(name: "compare-approaches", targets: ["CompareApproaches"]),
     ],
     targets: [
         .target(name: "GestureEngine"),
+        // The four approaches being compared, shared by the comparison tool
+        // and the app's live test so both run exactly the same code.
+        .target(name: "GestureLearning", dependencies: ["GestureEngine"]),
         // Trains every approach on the same recordings and writes score
-        // traces for the comparison notebook. Separate from the library so the
-        // app never links Create ML's training code.
-        .executableTarget(name: "CompareApproaches", dependencies: ["GestureEngine"]),
+        // traces for the comparison notebook.
+        .executableTarget(name: "CompareApproaches", dependencies: ["GestureEngine", "GestureLearning"]),
         .testTarget(name: "GestureEngineTests", dependencies: ["GestureEngine"]),
     ]
 )

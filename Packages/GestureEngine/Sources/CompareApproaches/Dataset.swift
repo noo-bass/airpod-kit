@@ -1,5 +1,6 @@
 import Foundation
 import GestureEngine
+import GestureLearning
 
 /// The recordings, split into a part each approach learns from and a part
 /// none of them has seen, plus the test stream built from the unseen part.
@@ -11,6 +12,12 @@ struct Dataset {
     var readingsPerSecond: Double
     var test: TestStream
     var skippedGestures: [String: Int]
+
+    /// Only the part the approaches may learn from.
+    var training: TrainingSet {
+        TrainingSet(gestures: gestures, takes: trainingTakes, background: trainingBackground,
+                    readingsPerSecond: readingsPerSecond)
+    }
 }
 
 /// Held-out ordinary use with held-out takes spliced in at known moments.
@@ -133,18 +140,4 @@ private func buildTestStream(background: [[MotionSample]], takes: [Recording], r
     }
     for sample in ordinary[min(cursor, ordinary.count)...] { append(sample) }
     return TestStream(samples: samples, events: events, backgroundSeconds: Double(ordinary.count) * step)
-}
-
-/// Repeatable shuffles, so the same recordings always give the same split
-/// and two runs can be compared.
-struct SeededRandom: RandomNumberGenerator {
-    private var state: UInt64
-    init(seed: UInt64) { state = seed }
-    mutating func next() -> UInt64 {
-        state &+= 0x9E37_79B9_7F4A_7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-        return z ^ (z >> 31)
-    }
 }

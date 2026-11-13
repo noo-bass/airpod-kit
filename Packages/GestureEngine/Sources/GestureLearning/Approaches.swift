@@ -9,10 +9,10 @@ import GestureEngine
 /// 1 means "at the point this approach itself would fire". The notebook then
 /// applies the same firing rule to all of them, so differences come from how
 /// they judge movement, not from differences in how they decide to fire.
-protocol Approach {
+public protocol Approach {
     var name: String { get }
     var explanation: String { get }
-    mutating func train(on data: Dataset) throws
+    mutating func train(on data: TrainingSet) throws
     /// Scores for each gesture, judging the movement up to `index`.
     func scores(upTo index: Int, in samples: [MotionSample]) -> [String: Double]
 }
@@ -21,24 +21,28 @@ protocol Approach {
 
 /// The approach already in the app: compare against each recorded example,
 /// allowing for speed differences, and fire when close enough.
-struct ExampleMatching: Approach {
+public struct ExampleMatching: Approach {
     let exampleLimit: Int?
+
+    public init(exampleLimit: Int?) {
+        self.exampleLimit = exampleLimit
+    }
     var models: [String: GestureModel] = [:]
 
-    var name: String { exampleLimit.map { "examples (\($0) each)" } ?? "examples (all)" }
-    var explanation: String {
+    public var name: String { exampleLimit.map { "examples (\($0) each)" } ?? "examples (all)" }
+    public var explanation: String {
         exampleLimit.map { "Matches against just \($0) recorded examples of each gesture, the way someone would use it after a quick setup." }
             ?? "Matches against every training example of each gesture."
     }
 
-    mutating func train(on data: Dataset) throws {
+    public mutating func train(on data: TrainingSet) throws {
         for gesture in data.gestures {
-            let takes = data.trainingTakes[gesture]!.map(\.samples)
+            let takes = data.takes[gesture]!.map(\.samples)
             models[gesture] = try GestureLearner.learn(from: exampleLimit.map { Array(takes.prefix($0)) } ?? takes)
         }
     }
 
-    func scores(upTo index: Int, in samples: [MotionSample]) -> [String: Double] {
+    public func scores(upTo index: Int, in samples: [MotionSample]) -> [String: Double] {
         // Five seconds at 50 readings a second is more than any model looks at.
         let history = Array(samples[max(0, index - 250)...index])
         return models.mapValues { model in
@@ -63,7 +67,7 @@ struct LabelledWindows {
     /// clench is not drowned in a long stretch of stillness.
     static let seconds = 1.0
 
-    init(from data: Dataset, random: inout SeededRandom, seconds: Double = Self.seconds) throws {
+    init(from data: TrainingSet, random: inout SeededRandom, seconds: Double = Self.seconds) throws {
         length = Int((data.readingsPerSecond * seconds).rounded())
         windows = []
         labels = []
@@ -73,7 +77,7 @@ struct LabelledWindows {
             // Where the gesture sits inside each take is found with the
             // example matcher's own movement finder, so both approaches agree
             // on what "the gesture" is.
-            let takes = data.trainingTakes[gesture]!
+            let takes = data.takes[gesture]!
             let finder = try GestureLearner.learn(from: takes.map(\.samples))
             for take in takes {
                 guard let range = finder.movementRange(in: take.samples) else { continue }
@@ -93,7 +97,7 @@ struct LabelledWindows {
 
         var ordinary: [ArraySlice<MotionSample>] = []
         let stride = max(1, Int(rate * 0.25))
-        for background in data.trainingBackground where background.count >= length {
+        for background in data.background where background.count >= length {
             for start in Swift.stride(from: 0, through: background.count - length, by: stride) {
                 ordinary.append(background[start..<(start + length)])
             }
@@ -130,14 +134,18 @@ private func probabilities(from output: MLFeatureProvider, model: MLModel, gestu
 /// A general-purpose classifier (boosted decision trees) fed a few summary
 /// numbers per window: average, spread, highest, lowest and jerkiness of each
 /// sensor channel. This is the classic recipe in the earable papers.
-struct SummaryNumbersClassifier: Approach {
+public struct SummaryNumbersClassifier: Approach {
     var seed: UInt64
+
+    public init(seed: UInt64) {
+        self.seed = seed
+    }
     var gestures: [String] = []
     var length = 0
     var model: MLModel?
 
-    var name: String { "classifier (summary numbers)" }
-    var explanation: String {
+    public var name: String { "classifier (summary numbers)" }
+    public var explanation: String {
         "Boosted decision trees on 32 summary numbers per one-second window. Learns from gestures and from normal use, so it also learns what to ignore."
     }
 
@@ -160,7 +168,7 @@ struct SummaryNumbersClassifier: Approach {
 
     private static func featureName(_ index: Int) -> String { "n\(index)" }
 
-    mutating func train(on data: Dataset) throws {
+    public mutating func train(on data: TrainingSet) throws {
         var random = SeededRandom(seed: seed)
         let labelled = try LabelledWindows(from: data, random: &random)
         gestures = data.gestures
@@ -178,7 +186,7 @@ struct SummaryNumbersClassifier: Approach {
         model = classifier.model
     }
 
-    func scores(upTo index: Int, in samples: [MotionSample]) -> [String: Double] {
+    public func scores(upTo index: Int, in samples: [MotionSample]) -> [String: Double] {
         guard let model, index + 1 >= length else { return [:] }
         let numbers = Self.summary(samples[(index + 1 - length)...index])
         var input: [String: Any] = [:]
@@ -197,18 +205,22 @@ struct SummaryNumbersClassifier: Approach {
 /// exactly this kind of motion-sensor stream. It reads the raw readings
 /// rather than summary numbers, so it can pick up shapes the summary loses,
 /// but it usually wants more examples to do so.
-struct ActivityClassifier: Approach {
+public struct ActivityClassifier: Approach {
     var seed: UInt64
+
+    public init(seed: UInt64) {
+        self.seed = seed
+    }
     var gestures: [String] = []
     var length = 0
     var model: MLModel?
 
-    var name: String { "classifier (Apple activity)" }
-    var explanation: String {
+    public var name: String { "classifier (Apple activity)" }
+    public var explanation: String {
         "Create ML's activity classifier, a small neural network on the raw one-second window. Also learns from normal use."
     }
 
-    mutating func train(on data: Dataset) throws {
+    public mutating func train(on data: TrainingSet) throws {
         var random = SeededRandom(seed: seed)
         let labelled = try LabelledWindows(from: data, random: &random)
         gestures = data.gestures
@@ -249,7 +261,7 @@ struct ActivityClassifier: Approach {
         model = classifier.model
     }
 
-    func scores(upTo index: Int, in samples: [MotionSample]) -> [String: Double] {
+    public func scores(upTo index: Int, in samples: [MotionSample]) -> [String: Double] {
         guard let model, index + 1 >= length else { return [:] }
         let window = samples[(index + 1 - length)...index]
         var input: [String: Any] = [:]

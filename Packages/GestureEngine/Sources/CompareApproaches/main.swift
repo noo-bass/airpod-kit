@@ -7,6 +7,7 @@
 // threshold can be changed there and the effect seen without retraining.
 import Foundation
 import GestureEngine
+import GestureLearning
 
 func say(_ line: String) {
     print(line)
@@ -67,7 +68,7 @@ for index in approaches.indices {
     say("\(name): training")
     let trainingStart = Date()
     do {
-        try approaches[index].train(on: data)
+        try approaches[index].train(on: data.training)
     } catch {
         say("\(name): training failed: \(error)")
         failedApproaches.append(["name": name, "error": "\(error)"])
