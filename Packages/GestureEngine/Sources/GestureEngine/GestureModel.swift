@@ -21,6 +21,9 @@ public struct GestureModel: Sendable, Codable, Equatable {
     var longestTemplateLength: Int
 
     public var exampleCount: Int { templates.count }
+    /// Examples (counting from 1) left out because no movement was found in
+    /// them, so the app can say which to re-record.
+    public internal(set) var skippedExampleNumbers: [Int] = []
 
     /// How many multiples of resting jitter to ignore on each channel.
     ///
@@ -125,10 +128,13 @@ public enum GestureLearner {
             // can be movement without spoiling the estimate.
             let spread = chunkSpreads.isEmpty ? 0 : chunkSpreads[chunkSpreads.count / 4]
             centre[channel] = middle
-            // A floor stops a channel that happened to read perfectly flat
-            // from being divided by zero and then blowing up at the first
-            // wobble of real use.
-            scale[channel] = max(spread, channel < 3 ? 0.02 : 0.004)
+            // A tiny floor only, so a channel that read perfectly flat is not
+            // divided by zero. The first floors (0.02 rad/s, 0.004 g) were
+            // guesses made for made-up data, and real AirPods Pro measured
+            // two to two and a half times quieter than that on three of six
+            // channels. The floor then shrank real signal and faint jaw
+            // clenches were rejected as no movement.
+            scale[channel] = max(spread, channel < 3 ? 0.002 : 0.0003)
         }
 
         let partialModel = GestureModel(
@@ -136,15 +142,24 @@ public enum GestureLearner {
             matchThreshold: 0, minimumActivity: 0, longestTemplateLength: 0
         )
 
+        // A take where the gesture did not register is left out rather than
+        // stopping the whole gesture: one fumbled clench in twenty should cost
+        // that one take, not every approach that learns from the other
+        // nineteen.
         var templates: [[[Double]]] = []
         var peakActivities: [Double] = []
+        var skipped: [Int] = []
         for (index, recording) in recordings.enumerated() {
             let scaledFrames = recording.map { partialModel.scaled($0.features) }
             guard let trimmed = trimToMovement(scaledFrames) else {
-                throw GestureLearningError.noMovementFound(exampleNumber: index + 1)
+                skipped.append(index + 1)
+                continue
             }
             templates.append(trimmed.frames)
             peakActivities.append(trimmed.peakActivity)
+        }
+        if templates.count < minimumExamples, let firstSkipped = skipped.first {
+            throw GestureLearningError.noMovementFound(exampleNumber: firstSkipped)
         }
 
         // The threshold comes from how much the examples differ from each
@@ -183,7 +198,8 @@ public enum GestureLearner {
             channelCentre: centre,
             matchThreshold: threshold,
             minimumActivity: (peakActivities.min() ?? 0) * 0.5,
-            longestTemplateLength: templates.map(\.count).max() ?? 0
+            longestTemplateLength: templates.map(\.count).max() ?? 0,
+            skippedExampleNumbers: skipped
         )
     }
 

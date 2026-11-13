@@ -8,6 +8,10 @@ struct SyntheticHead {
     var random = SeededRandom(seed: 7)
     var time: TimeInterval = 0
     let step = 1.0 / 25
+    /// Resting jitter. The defaults are rough; real AirPods Pro measured
+    /// quieter on most channels (about 0.01 rad/s and 0.0016 g).
+    var turnJitter = 0.02
+    var joltJitter = 0.003
 
     mutating func rest(seconds: Double) -> [MotionSample] {
         (0..<Int(seconds * 25)).map { _ in reading(rotation: .zero, jolt: .zero) }
@@ -47,8 +51,8 @@ struct SyntheticHead {
         let sample = MotionSample(
             timestamp: time,
             attitude: .zero,
-            rotationRate: Vector3(x: noisy(rotation.x, 0.02), y: noisy(rotation.y, 0.02), z: noisy(rotation.z, 0.02)),
-            userAcceleration: Vector3(x: noisy(jolt.x, 0.003), y: noisy(jolt.y, 0.003), z: noisy(jolt.z, 0.003))
+            rotationRate: Vector3(x: noisy(rotation.x, turnJitter), y: noisy(rotation.y, turnJitter), z: noisy(rotation.z, turnJitter)),
+            userAcceleration: Vector3(x: noisy(jolt.x, joltJitter), y: noisy(jolt.y, joltJitter), z: noisy(jolt.z, joltJitter))
         )
         time += step
         return sample
@@ -143,4 +147,27 @@ func fireTimes(of detector: inout GestureDetector<String>, over stream: [MotionS
         head.nod(seconds: 1.6, strength: index == 4 ? 0.8 : 2)
     }.map { take in Array(take.dropFirst(15).dropLast(25)) })
     #expect(model.exampleCount == 5)
+}
+
+/// Real AirPods Pro were two to two and a half times quieter on three of six
+/// channels than the minimum jitter first hard-coded for made-up data. The
+/// minimum then shrank real signal, and faint jaw clenches were rejected as
+/// no movement at all.
+@Test func findsAFaintClenchOnQuietSensors() throws {
+    var quiet = SyntheticHead()
+    quiet.turnJitter = 0.01
+    quiet.joltJitter = 0.0015
+    let takes = (0..<4).map { _ in quiet.rest(seconds: 1) + quiet.clench(strength: 0.012) + quiet.rest(seconds: 1) }
+    #expect(try GestureLearner.learn(from: takes).exampleCount == 4)
+}
+
+/// One take where the gesture did not register used to stop the whole
+/// gesture from being learnt, and with it every approach that relied on it.
+@Test func skipsATakeWithNoMovementAndSaysWhich() throws {
+    var head = SyntheticHead()
+    var takes = (0..<3).map { _ in head.rest(seconds: 1) + head.nod() + head.rest(seconds: 1) }
+    takes.insert(head.rest(seconds: 2.5), at: 1)
+    let model = try GestureLearner.learn(from: takes)
+    #expect(model.exampleCount == 3)
+    #expect(model.skippedExampleNumbers == [2])
 }
