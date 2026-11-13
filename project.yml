@@ -22,6 +22,8 @@ targets:
     sources: [App]
     dependencies:
       - package: GestureEngine
+      - package: GestureEngine
+        product: GestureLearning
     info:
       path: App/Info.plist
       properties:

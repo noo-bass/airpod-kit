@@ -7,6 +7,7 @@ struct MainWindow: View {
     enum Section: Hashable {
         case live
         case record
+        case tryIt
     }
 
     @Environment(AirPodKit.self) private var kit
@@ -17,6 +18,7 @@ struct MainWindow: View {
             List(selection: $section) {
                 Label("Live sensors", systemImage: "waveform.path.ecg").tag(Section.live)
                 Label("Record", systemImage: "record.circle").tag(Section.record)
+                Label("Try it", systemImage: "hand.tap").tag(Section.tryIt)
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200)
             .safeAreaInset(edge: .bottom) {
@@ -27,6 +29,7 @@ struct MainWindow: View {
             switch section ?? .live {
             case .live: LiveSensorsView()
             case .record: RecordView()
+            case .tryIt: TryItView()
             }
         }
     }

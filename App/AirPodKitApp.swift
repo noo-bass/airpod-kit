@@ -31,11 +31,13 @@ final class AirPodKit {
     let store = RecordingStore()
     let takes = TakeSession()
     let background = BackgroundSession()
+    let trial = LiveTrial()
 
     init() {
-        motion.onSample = { [takes, background] sample in
+        motion.onSample = { [takes, background, trial] sample in
             takes.receive(sample)
             background.receive(sample)
+            trial.receive(sample)
         }
         motion.start()
     }

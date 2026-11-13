@@ -65,6 +65,15 @@ final class RecordingStore {
         }
     }
 
+    /// Every recording in full, for training. Read from disk each time
+    /// rather than kept in memory: an hour of normal use is about 50 MB.
+    func loadAllRecordings() -> [Recording] {
+        summaries.compactMap { summary in
+            guard let data = try? Data(contentsOf: summary.fileURL) else { return nil }
+            return try? decoder.decode(Recording.self, from: data)
+        }
+    }
+
     func delete(_ summary: Summary) {
         try? FileManager.default.removeItem(at: summary.fileURL)
         reload()
