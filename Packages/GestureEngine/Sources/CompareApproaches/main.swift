@@ -59,6 +59,9 @@ let ticks = Array(Swift.stride(from: 0, to: data.test.samples.count, by: stride)
 
 var scoreLines = ["approach,gesture,time,score"]
 var approachSummaries: [[String: Any]] = []
+// Kept in the results, not just printed: a failure that only scrolled past in
+// the tool's output once left the notebook quietly comparing one approach.
+var failedApproaches: [[String: String]] = []
 for index in approaches.indices {
     let name = approaches[index].name
     say("\(name): training")
@@ -67,6 +70,7 @@ for index in approaches.indices {
         try approaches[index].train(on: data)
     } catch {
         say("\(name): training failed: \(error)")
+        failedApproaches.append(["name": name, "error": "\(error)"])
         continue
     }
     let trainingSeconds = Date().timeIntervalSince(trainingStart)
@@ -117,6 +121,13 @@ let summary: [String: Any] = [
     "gestures": data.gestures.map { ["name": $0, "training": data.trainingTakes[$0]!.count, "test": data.testTakes[$0]!.count] },
     "skippedGestures": data.skippedGestures,
     "approaches": approachSummaries,
+    "failedApproaches": failedApproaches,
+    // Takes the example matcher found no movement in, per gesture, counting
+    // from 1 within that gesture's training takes. Both classifiers locate
+    // gestures with the same matcher, so they skip the same takes.
+    "skippedTakes": Dictionary(uniqueKeysWithValues: data.gestures.map { gesture in
+        (gesture, (try? GestureLearner.learn(from: data.trainingTakes[gesture]!.map(\.samples)))?.skippedExampleNumbers ?? [])
+    }),
 ]
 try JSONSerialization.data(withJSONObject: summary, options: [.prettyPrinted, .sortedKeys])
     .write(to: outputFolder.appendingPathComponent("summary.json"))

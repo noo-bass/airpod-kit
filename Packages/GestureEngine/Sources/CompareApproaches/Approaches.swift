@@ -63,8 +63,8 @@ struct LabelledWindows {
     /// clench is not drowned in a long stretch of stillness.
     static let seconds = 1.0
 
-    init(from data: Dataset, random: inout SeededRandom) throws {
-        length = Int((data.readingsPerSecond * Self.seconds).rounded())
+    init(from data: Dataset, random: inout SeededRandom, seconds: Double = Self.seconds) throws {
+        length = Int((data.readingsPerSecond * seconds).rounded())
         windows = []
         labels = []
         let rate = data.readingsPerSecond
@@ -210,9 +210,12 @@ struct ActivityClassifier: Approach {
 
     mutating func train(on data: Dataset) throws {
         var random = SeededRandom(seed: seed)
-        let labelled = try LabelledWindows(from: data, random: &random)
+        // Two-second recordings for a one-second model window. With
+        // recordings exactly one window long, the model trained without
+        // complaint and then gave the same answer for every input.
+        let labelled = try LabelledWindows(from: data, random: &random, seconds: LabelledWindows.seconds * 2)
         gestures = data.gestures
-        length = labelled.length
+        length = labelled.length / 2
 
         // One row per window, each sensor channel held as that window's
         // sequence of readings: the layout this version of Create ML asks

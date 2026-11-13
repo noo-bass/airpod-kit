@@ -107,13 +107,22 @@ def _(json, mo, pl, results_folder):
     approach_names = [approach["name"] for approach in summary["approaches"]]
     gesture_names = [gesture["name"] for gesture in summary["gestures"]]
 
-    mo.md(
+    mo.output.replace(mo.md(
         f"""
     **What went in.** {summary['readingsPerSecond']:.0f} readings a second.
     Gestures: {", ".join(f"{g['name']} ({g['training']} to learn from, {g['test']} held back)" for g in summary['gestures'])}.
     Normal use: {summary['backgroundTrainingSeconds'] / 60:.1f} minutes to learn from, {summary['backgroundTestSeconds'] / 60:.1f} minutes held back for testing.
     """
-    )
+    ))
+    if summary.get("failedApproaches"):
+        mo.output.append(mo.callout(mo.md("**Some approaches failed to train and are missing below.** " + " ".join(
+            f"*{f['name']}*: `{f['error']}`." for f in summary["failedApproaches"]
+        )), kind="danger"))
+    _skipped = {g: n for g, n in summary.get("skippedTakes", {}).items() if n}
+    if _skipped:
+        mo.output.append(mo.callout(mo.md("Takes left out because no movement was found in them: " + "; ".join(
+            f"{g}: {len(n)} of its training takes" for g, n in _skipped.items()
+        ) + ". Worth re-recording if it is many."), kind="warn"))
     return approach_names, events, gesture_names, scores, stream, summary
 
 
