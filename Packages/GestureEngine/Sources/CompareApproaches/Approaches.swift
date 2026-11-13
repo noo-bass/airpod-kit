@@ -210,23 +210,35 @@ struct ActivityClassifier: Approach {
 
     mutating func train(on data: Dataset) throws {
         var random = SeededRandom(seed: seed)
-        // Two-second recordings for a one-second model window. With
-        // recordings exactly one window long, the model trained without
-        // complaint and then gave the same answer for every input.
-        let labelled = try LabelledWindows(from: data, random: &random, seconds: LabelledWindows.seconds * 2)
+        let labelled = try LabelledWindows(from: data, random: &random)
         gestures = data.gestures
-        length = labelled.length / 2
+        length = labelled.length
 
-        // One row per window, each sensor channel held as that window's
-        // sequence of readings: the layout this version of Create ML asks
-        // for. Each window is its own recording, so the classifier never
-        // sees a window that straddles a gesture and ordinary movement.
+        // Create ML cuts each training recording into pieces one model
+        // window long, starting from the beginning. Two layouts failed:
+        //  - one window per recording trained without complaint but gave
+        //    the same answer for every input;
+        //  - two seconds centred on the gesture put the gesture exactly on
+        //    the cut, so the model learnt the stillness either side of a
+        //    clench as "clench", and scored real clenches at zero.
+        // So each recording is up to five windows laid end to end, each one
+        // already centred on its gesture (the shifted copies of one take, or
+        // stretches of ordinary use). Every piece Create ML cuts is then a
+        // whole window with the gesture inside it.
+        var recordings: [(label: String, windows: [ArraySlice<MotionSample>])] = []
+        for (window, label) in zip(labelled.windows, labelled.labels) {
+            if let last = recordings.last, last.label == label, last.windows.count < 5 {
+                recordings[recordings.count - 1].windows.append(window)
+            } else {
+                recordings.append((label, [window]))
+            }
+        }
         var columns: [String: MLDataValueConvertible] = [
-            "session": labelled.windows.indices.map { "window \($0)" },
-            "label": labelled.labels,
+            "session": recordings.indices.map { "recording \($0)" },
+            "label": recordings.map(\.label),
         ]
         for (channel, name) in channelNames.enumerated() {
-            columns[name] = labelled.windows.map { window in window.map { channels($0)[channel] } }
+            columns[name] = recordings.map { recording in recording.windows.flatMap { $0.map { channels($0)[channel] } } }
         }
         let table = try MLDataTable(dictionary: columns)
         let classifier = try MLActivityClassifier(
