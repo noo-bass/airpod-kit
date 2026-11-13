@@ -309,6 +309,42 @@ def _(events, gesture_names, judged_fires, pl):
 @app.cell
 def _(mo):
     mo.md(r"""
+    ## Could any threshold separate them?
+
+    The firing rule can hide what is going on underneath. This asks the question directly: for each approach and gesture, what is the *weakest* score it gave any held-back take of that gesture, and how often does ordinary use score at least that high? If ordinary use never reaches the weakest take, some threshold catches every gesture with no false triggers. If it often does, no threshold can, and the approach cannot tell that gesture from ordinary movement.
+
+    Scores are checked every tenth of a second, so 10 "moments" is about one second of ordinary use.
+    """)
+    return
+
+
+@app.cell
+def _(events, pl, scores):
+    _rows = []
+    for (_approach, _gesture), _group in scores.group_by(["approach", "gesture"]):
+        _held_back_best = []
+        _near_any_take = pl.lit(False)
+        for _event in events.iter_rows(named=True):
+            if _event["gesture"] == _gesture:
+                _held_back_best.append(_group.filter(pl.col("time").is_between(_event["promptTime"], _event["takeEnd"] + 0.8))["score"].max())
+            _near_any_take = _near_any_take | pl.col("time").is_between(_event["promptTime"] - 1, _event["takeEnd"] + 1.5)
+        _ordinary = _group.filter(~_near_any_take)["score"]
+        _rows.append({
+            "approach": _approach,
+            "gesture": _gesture,
+            "held-back takes (best score each)": " ".join(f"{_score:.2f}" for _score in sorted(_held_back_best)),
+            "weakest take": round(min(_held_back_best), 3),
+            "ordinary use: highest": round(_ordinary.max(), 3),
+            "ordinary moments at or above weakest take": int((_ordinary >= min(_held_back_best)).sum()),
+        })
+    separation = pl.DataFrame(_rows).sort(["gesture", "approach"])
+    separation
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
     ## Look at any moment
 
     Pick a held-back gesture, or a fire, to see the raw sensor readings around it and what each approach scored. Missed gestures and false triggers are the interesting ones: they show what each approach gets confused by.
